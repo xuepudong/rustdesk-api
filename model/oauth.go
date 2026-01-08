@@ -10,19 +10,20 @@ const OIDC_DEFAULT_SCOPES = "openid,profile,email"
 
 const (
 	// make sure the value shouldbe lowercase
-	OauthTypeGithub  string = "github"
-	OauthTypeGoogle  string = "google"
-	OauthTypeOidc    string = "oidc"
-	OauthTypeWebauth string = "webauth"
-	OauthTypeLinuxdo string = "linuxdo"
-	PKCEMethodS256   string = "S256"
-	PKCEMethodPlain  string = "plain"
+	OauthTypeGithub   string = "github"
+	OauthTypeGoogle   string = "google"
+	OauthTypeOidc     string = "oidc"
+	OauthTypeWebauth  string = "webauth"
+	OauthTypeLinuxdo  string = "linuxdo"
+	OauthTypeRuijieSID string = "ruijie_sid" // 锐捷 SourceID
+	PKCEMethodS256    string = "S256"
+	PKCEMethodPlain   string = "plain"
 )
 
 // Validate the oauth type
 func ValidateOauthType(oauthType string) error {
 	switch oauthType {
-	case OauthTypeGithub, OauthTypeGoogle, OauthTypeOidc, OauthTypeWebauth, OauthTypeLinuxdo:
+	case OauthTypeGithub, OauthTypeGoogle, OauthTypeOidc, OauthTypeWebauth, OauthTypeLinuxdo, OauthTypeRuijieSID:
 		return nil
 	default:
 		return errors.New("invalid Oauth type")
@@ -64,6 +65,8 @@ func (oa *Oauth) FormatOauthInfo() error {
 		oa.Op = OauthTypeGoogle
 	case OauthTypeLinuxdo:
 		oa.Op = OauthTypeLinuxdo
+	case OauthTypeRuijieSID:
+		oa.Op = OauthTypeRuijieSID
 	}
 	// check if the op is empty, set the default value
 	op := strings.TrimSpace(oa.Op)
@@ -171,6 +174,56 @@ func (lu *LinuxdoUser) ToOauthUser() *OauthUser {
 		Email:         lu.Email,
 		VerifiedEmail: true, // linux.do 用户邮箱默认已验证
 		Picture:       lu.Avatar,
+	}
+}
+
+// RuijieSIDUser 锐捷 SourceID 用户信息结构
+// 参考文档: OAuth2.0认证demo示例
+type RuijieSIDUser struct {
+	Id         string                 `json:"id"`         // 用户名/学号
+	Attributes map[string]interface{} `json:"attributes"` // 用户属性列表
+}
+
+func (rsu *RuijieSIDUser) ToOauthUser() *OauthUser {
+	username := strings.ToLower(rsu.Id)
+	name := rsu.Id     // 默认使用 id
+	email := ""        // 需要从 attributes 提取
+	picture := ""      // 锐捷 SID 不提供头像
+
+	// 从 attributes 中提取常见字段
+	if rsu.Attributes != nil {
+		// XM: 姓名
+		if xm, ok := rsu.Attributes["XM"].(string); ok && xm != "" {
+			name = xm
+		}
+
+		// Email 或 DZYX (电子邮箱)
+		if emailAttr, ok := rsu.Attributes["Email"].(string); ok && emailAttr != "" {
+			email = emailAttr
+		} else if dzyx, ok := rsu.Attributes["DZYX"].(string); ok && dzyx != "" {
+			email = dzyx
+		}
+
+		// TEL: 手机号，如果没有邮箱，使用手机号构造
+		if email == "" {
+			if tel, ok := rsu.Attributes["TEL"].(string); ok && tel != "" {
+				email = tel + "@ruijie.sid"
+			}
+		}
+	}
+
+	// 如果仍然没有邮箱，使用 id 构造
+	if email == "" {
+		email = username + "@ruijie.sid"
+	}
+
+	return &OauthUser{
+		OpenId:        rsu.Id,
+		Name:          name,
+		Username:      username,
+		Email:         email,
+		VerifiedEmail: true, // 锐捷 SID 用户默认已验证
+		Picture:       picture,
 	}
 }
 

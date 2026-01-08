@@ -168,6 +168,22 @@ func (os *OauthService) LinuxdoProvider() *oidc.Provider {
 	}).NewProvider(context.Background())
 }
 
+func (os *OauthService) RuijieSIDProvider(baseURL string) *oidc.Provider {
+	// 如果没有配置 baseURL，使用默认值
+	if baseURL == "" {
+		baseURL = "https://sourceid.ruishan.cc"
+	}
+	return (&oidc.ProviderConfig{
+		IssuerURL:     "",
+		AuthURL:       baseURL + "/oauth2.0/authorize",
+		TokenURL:      baseURL + "/oauth2.0/accessToken",
+		DeviceAuthURL: "",
+		UserInfoURL:   baseURL + "/oauth2.0/profile",
+		JWKSURL:       "",
+		Algorithms:    nil,
+	}).NewProvider(context.Background())
+}
+
 // GetOauthConfig retrieves the OAuth2 configuration based on the provider name
 func (os *OauthService) GetOauthConfig(op string) (err error, oauthInfo *model.Oauth, oauthConfig *oauth2.Config, provider *oidc.Provider) {
 	//err, oauthInfo, oauthConfig = os.getOauthConfigGeneral(op)
@@ -196,6 +212,15 @@ func (os *OauthService) GetOauthConfig(op string) (err error, oauthInfo *model.O
 		provider = os.LinuxdoProvider()
 		oauthConfig.Endpoint = provider.Endpoint()
 		oauthConfig.Scopes = []string{"profile"}
+	case model.OauthTypeRuijieSID:
+		provider = os.RuijieSIDProvider(oauthInfo.Issuer)
+		oauthConfig.Endpoint = provider.Endpoint()
+		// 锐捷 SID 的 scope 是可选的，如果配置了就使用配置的，否则为空
+		if oauthInfo.Scopes != "" {
+			oauthConfig.Scopes = os.constructScopes(oauthInfo.Scopes)
+		} else {
+			oauthConfig.Scopes = []string{}
+		}
 	//case model.OauthTypeGoogle: //google单独出来，可以少一次FetchOidcEndpoint请求
 	//	oauthConfig.Endpoint = google.Endpoint
 	//	oauthConfig.Scopes = os.constructScopes(oauthInfo.Scopes)
@@ -323,6 +348,16 @@ func (os *OauthService) linuxdoCallback(oauthConfig *oauth2.Config, provider *oi
 	return nil, user.ToOauthUser()
 }
 
+// ruijieSIDCallback 锐捷 SID 回调
+func (os *OauthService) ruijieSIDCallback(oauthConfig *oauth2.Config, provider *oidc.Provider, code, verifier, nonce string) (error, *model.OauthUser) {
+	var user = &model.RuijieSIDUser{}
+	err, _ := os.callbackBase(oauthConfig, provider, code, verifier, nonce, user)
+	if err != nil {
+		return err, nil
+	}
+	return nil, user.ToOauthUser()
+}
+
 // oidcCallback oidc回调, 通过code获取用户信息
 func (os *OauthService) oidcCallback(oauthConfig *oauth2.Config, provider *oidc.Provider, code, verifier, nonce string) (error, *model.OauthUser) {
 	var user = &model.OidcUser{}
@@ -345,6 +380,8 @@ func (os *OauthService) Callback(code, verifier, op, nonce string) (err error, o
 		err, oauthUser = os.githubCallback(oauthConfig, provider, code, verifier, nonce)
 	case model.OauthTypeLinuxdo:
 		err, oauthUser = os.linuxdoCallback(oauthConfig, provider, code, verifier, nonce)
+	case model.OauthTypeRuijieSID:
+		err, oauthUser = os.ruijieSIDCallback(oauthConfig, provider, code, verifier, nonce)
 	case model.OauthTypeOidc, model.OauthTypeGoogle:
 		err, oauthUser = os.oidcCallback(oauthConfig, provider, code, verifier, nonce)
 	default:

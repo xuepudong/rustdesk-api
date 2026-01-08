@@ -1,0 +1,77 @@
+# ============================================
+# RustDesk API with Ruijie SID - Dockerfile
+# ============================================
+# 多阶段构建: 前端 -> 后端 -> 最终镜像
+
+# ============================================
+# 阶段 1: 构建前端管理面板
+# ============================================
+FROM node:18-alpine AS admin-builder
+
+WORKDIR /app/admin
+
+# 复制前端代码
+COPY ./resources/admin/package*.json ./
+RUN npm install --production=false
+
+COPY ./resources/admin .
+RUN npm run build
+
+# ============================================
+# 阶段 2: 构建 Go 后端
+# ============================================
+FROM golang:1.23-alpine AS go-builder
+
+# 安装构建依赖
+RUN apk add --no-cache git gcc musl-dev
+
+WORKDIR /app
+
+# 复制依赖文件并下载
+COPY go.mod go.sum ./
+RUN go mod download
+
+# 复制源代码
+COPY . .
+
+# 安装 swag 并生成 Swagger 文档
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+RUN swag init -g cmd/apimain.go --output ./docs/api --instanceName api
+RUN swag init -g cmd/adminmain.go --output ./docs/admin --instanceName admin
+
+# 构建应用
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o rustdesk-api ./cmd
+
+# ============================================
+# 阶段 3: 最终运行镜像
+# ============================================
+FROM alpine:latest
+
+# 安装运行时依赖
+RUN apk add --no-cache ca-certificates tzdata
+
+# 设置时区为上海
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+WORKDIR /app
+
+# 从构建阶段复制文件
+COPY --from=go-builder /app/rustdesk-api .
+COPY --from=go-builder /app/docs ./docs
+COPY --from=admin-builder /app/admin/dist ./resources/admin/dist
+COPY ./resources/templates ./resources/templates
+COPY ./resources/static ./resources/static
+
+# 创建配置目录
+RUN mkdir -p /app/config /app/logs
+
+# 暴露端口
+EXPOSE 21114
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:21114/api/health || exit 1
+
+# 启动应用
+CMD ["./rustdesk-api"]

@@ -25,16 +25,25 @@ import (
 
 const DatabaseVersion = 265
 
-// @title 管理系统API
-// @version 1.0
-// @description 接口
-// @basePath /api
-// @securityDefinitions.apikey token
-// @in header
-// @name api-token
-// @securitydefinitions.apikey BearerAuth
+// @title RustDesk API
+// @version 2.0
+// @description RustDesk API 服务，提供设备管理、地址簿、审计日志、OAuth 认证等功能
+// @description 支持 RustDesk 客户端和 Web 管理后台
+// @contact.name API Support
+// @contact.url https://github.com/lejianwen/rustdesk-api
+// @contact.email support@rustdesk.com
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+// @host localhost:21114
+// @BasePath /api
+// @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
+// @description Bearer Token 认证，格式: "Bearer {token}"。用于 RustDesk 客户端 API 认证。
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name api-token
+// @description API Token 认证，用于管理后台 API 认证。
 
 var rootCmd = &cobra.Command{
 	Use:   "apimain",
