@@ -37,7 +37,7 @@ services:
   rustdesk-api:
     build:
       context: .
-      dockerfile: Dockerfile.ruijie
+      dockerfile: Dockerfile.simple
     container_name: rustdesk-api
     restart: always
     depends_on:
