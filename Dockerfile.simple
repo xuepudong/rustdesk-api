@@ -45,8 +45,13 @@ WORKDIR /app
 # 从构建阶段复制文件
 COPY --from=go-builder /app/rustdesk-api .
 COPY --from=go-builder /app/docs ./docs
+
+# 只复制实际存在的资源文件
 COPY ./resources/templates ./resources/templates
-COPY ./resources/static ./resources/static
+COPY ./resources/i18n ./resources/i18n
+COPY ./resources/public ./resources/public
+COPY ./resources/web ./resources/web
+COPY ./resources/version ./resources/version
 
 # 创建配置目录
 RUN mkdir -p /app/config /app/logs
